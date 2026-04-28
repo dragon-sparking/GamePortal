@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>漫画巻数ブラックジャック</title>
+    <style>
+        :root { 
+            --bg-main: #ffffff; 
+            --bg-side: #f8f9fa; 
+            --text-main: #1f1f1f; 
+            --text-sub: #70757a; 
+            --accent: #1a73e8; 
+            --border: #dadce0; 
+            --highlight: #e8f0fe; 
+            --danger: #d93025; 
+            --turn-bg: #1a73e8; 
+        }
+        body { 
+            font-family: 'Helvetica Neue', Arial, sans-serif; 
+            background-color: var(--bg-main); 
+            color: var(--text-main); 
+            margin: 0; 
+            display: flex; 
+            height: 100vh; 
+            overflow: hidden; 
+        }
+        #sidebar { 
+            width: 280px; 
+            background-color: var(--bg-side); 
+            border-right: 1px solid var(--border); 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        .sidebar-header { font-weight: bold; font-size: 1.1em; margin-bottom: 20px; color: var(--text-sub); }
+        .player-item { 
+            padding: 12px; 
+            border-radius: 8px; 
+            margin-bottom: 8px; 
+            background: #fff; 
+            border: 1px solid transparent; 
+            transition: all 0.2s;
+        }
+        .player-item.active { background-color: var(--highlight); border-color: var(--accent); }
+        .player-info { display: flex; justify-content: space-between; align-items: center; }
+        .player-winpoints { font-size: 0.85em; color: var(--accent); font-weight: bold; }
+        
+        #main-content { flex: 1; display: flex; flex-direction: column; padding: 30px; position: relative; }
+        #status-display { margin-bottom: 30px; text-align: center; }
+        
+        #turn-message { 
+            font-size: 1.1em; 
+            margin-bottom: 10px; 
+            padding: 10px; 
+            border-radius: 8px; 
+            transition: all 0.3s; 
+            background: var(--bg-side);
+            min-height: 1.5em;
+        }
+        #turn-message.my-turn { 
+            background-color: var(--turn-bg); 
+            color: white; 
+            font-weight: bold; 
+            transform: scale(1.05); 
+            box-shadow: 0 4px 12px rgba(26, 115, 232, 0.2);
+        }
+        #turn-message.burst-state { 
+            background-color: var(--danger) !important; 
+            color: white !important; 
+            animation: shake 0.5s; 
+        }
+        @keyframes shake { 
+            0%, 100% { transform: translateX(0); } 
+            25% { transform: translateX(-5px); } 
+            50% { transform: translateX(5px); } 
+            75% { transform: translateX(-5px); } 
+        }
+        
+        .controls { display: flex; gap: 10px; justify-content: center; margin-top: 15px; }
+        button { 
+            background-color: var(--accent); 
+            color: white; 
+            border: none; 
+            padding: 12px 28px; 
+            border-radius: 24px; 
+            font-weight: 500; 
+            cursor: pointer; 
+            transition: opacity 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+        button.secondary { background-color: white; color: var(--text-sub); border: 1px solid var(--border); }
+        button:disabled { background-color: var(--border); cursor: not-allowed; }
+
+        .deck-container { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); 
+            gap: 20px; 
+            margin-bottom: 20px; 
+            flex: 1; 
+            overflow-y: auto; 
+        }
+        .manga-card { 
+            width: 100%; 
+            aspect-ratio: 2/3; 
+            object-fit: cover; 
+            border-radius: 8px; 
+            border: 1px solid var(--border); 
+            cursor: pointer; 
+            transition: transform 0.2s;
+        }
+        .manga-card:hover:not(.selected) { transform: scale(1.03); }
+        .manga-card.selected { opacity: 0.4; filter: grayscale(80%); cursor: default; }
+        
+        #log-container { 
+            border: 1px solid var(--border); 
+            border-radius: 12px; 
+            padding: 15px; 
+            height: 100px; 
+            overflow-y: auto; 
+            background: #fff; 
+            font-size: 0.85em; 
+        }
+        #footer-note { font-size: 0.75em; color: var(--text-sub); text-align: right; margin-top: 10px; }
+        
+        .rule-box { 
+            background: var(--bg-side); 
+            padding: 24px 40px; 
+            border-radius: 16px; 
+            margin: 30px auto; 
+            max-width: 600px; 
+            border: 1px solid var(--border); 
+        }
+        .rule-box p { font-size: 1.05em; line-height: 1.8; text-align: left; margin: 0; white-space: nowrap; }
+        
+        .modal { 
+            display: none; 
+            position: fixed; 
+            top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(255,255,255,0.85); 
+            backdrop-filter: blur(5px); 
+            z-index: 100; 
+        }
+        .modal-content { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            background: white; padding: 40px; border-radius: 24px; 
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1); 
+            width: 320px; text-align: center; 
+        }
+        .final-rank-highlight { font-size: 1.5em; color: #d4af37; margin: 20px 0; font-weight: bold; }
+        .hidden { display: none; }
+        .burst-text { color: var(--danger); font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <div class="sidebar-header">プレイヤー順位</div>
+        <div id="player-list"></div>
+    </div>
+    <div id="main-content">
+        <div id="login-area" style="text-align: center; margin-top: 60px;">
+            <a href="index.html" style="text-decoration:none; color:var(--text-sub); margin-bottom:20px; display:inline-block;">← ポータルへ戻る</a>
+            <h1 style="font-weight: 500; font-size: 2.5em; color: var(--accent);">漫画巻数ブラックジャック</h1>
+            <div class="rule-box">
+                <p>漫画を順番に選択し、<strong>100を超えないように</strong>出来るだけ近づけよう！<br>
+                ・100を超えると「バースト」となり獲得ptは0になります。<br>
+                ・全ての漫画がなくなると終了。累計ptで競います。</p>
+            </div>
+            <input type="text" id="username-input" placeholder="名前を入力" style="padding: 14px; border-radius: 8px; border: 1px solid var(--border); width: 240px; font-size: 1em;">
+            <button id="join-btn">参加する</button>
+        </div>
+
+        <div id="game-area" class="hidden" style="display: flex; flex-direction: column; height: 100%;">
+            <div id="status-display">
+                <div id="turn-message">待機中...</div>
+                <div class="controls">
+                    <button id="ready-btn">準備完了</button>
+                    <button id="stand-btn" class="secondary hidden">このラウンドを終了</button>
+                </div>
+            </div>
+            <div id="manga-deck" class="deck-container"></div>
+            <div id="log-container"></div>
+            <div id="footer-note">2026年04月28日時点のデータです</div>
+        </div>
+    </div>
+
+    <div id="round-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="modal-title">ラウンド終了</h2>
+            <div id="modal-body"></div>
+            <button id="next-round-btn" style="width: 100%;">次へ</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let isMyTurn = false, allUsers = [], goal = 100, currentGameState = 'waiting';
+
+        // 参加処理
+        document.getElementById('join-btn').onclick = () => {
+            const name = document.getElementById('username-input').value;
+            if(!name) return;
+            document.getElementById('login-area').classList.add('hidden');
+            document.getElementById('game-area').classList.remove('hidden');
+            socket.emit('join-game', name);
+        };
+
+        // 準備完了ボタン
+        document.getElementById('ready-btn').onclick = function() { 
+            this.disabled = true; 
+            this.innerText = "準備完了しました";
+            
+            // 上部メッセージを待機中に固定
+            const el = document.getElementById('turn-message');
+            el.innerText = "他のプレイヤーを待っています...";
+            el.classList.remove('my-turn', 'burst-state');
+            
+            socket.emit('player-ready'); 
+        };
+
+        // スタンドボタン
+        document.getElementById('stand-btn').onclick = () => { 
+            if(isMyTurn && confirm("このラウンドを終了しますか？")) socket.emit('player-stand'); 
+        };
+
+        // ユーザーリスト更新
+        socket.on('update-user-list', (users) => {
+            allUsers = users;
+            const list = document.getElementById('player-list');
+            list.innerHTML = "";
+            users.sort((a,b) => b.totalWinPoint - a.totalWinPoint || b.score - a.score);
+            
+            users.forEach(u => {
+                const div = document.createElement('div');
+                div.className = `player-item ${u.active?'active':''}`;
+                const statusTxt = u.status === 'burst' ? '(バースト)' : (u.isStand ? '(終了)' : (u.ready ? '(準備完了)' : ''));
+                div.innerHTML = `
+                    <div class="player-info"><span>${u.name}</span><span>${u.totalWinPoint}pt</span></div>
+                    <div style="font-size:0.8em;" class="${u.status==='burst'?'burst-text':''}">${u.score}/${goal}巻 ${statusTxt}</div>
+                `;
+                list.appendChild(div);
+            });
+
+            // 自分が準備完了している時は「待機中」を維持
+            const me = users.find(u => u.id === socket.id);
+            if (me && me.ready && currentGameState === 'waiting') return;
+
+            const curr = users.find(u => u.active);
+            if(curr) updateMsg(curr.id);
+        });
+
+        // ラウンド開始
+        socket.on('round-started', (data) => {
+            currentGameState = 'playing';
+            document.getElementById('ready-btn').classList.add('hidden');
+            document.getElementById('stand-btn').classList.remove('hidden');
+            document.getElementById('round-modal').style.display = "none";
+            updateDeck(data.deck);
+            updateMsg(data.currentTurn);
+        });
+
+        socket.on('turn-update', (data) => updateMsg(data.currentTurn));
+
+        // メッセージ更新ロジック
+        function updateMsg(id) {
+            const me = allUsers.find(u => u.id === socket.id);
+            isMyTurn = (id === socket.id);
+            const el = document.getElementById('turn-message');
+            el.classList.remove('my-turn', 'burst-state');
+
+            if(me && me.status === 'burst') { 
+                el.innerText = "バーストしました！"; 
+                el.classList.add('burst-state'); 
+            } else if(isMyTurn) { 
+                el.innerText = "あなたのターン"; 
+                el.classList.add('my-turn'); 
+            } else if (id) {
+                const other = allUsers.find(u => u.id === id);
+                el.innerText = other ? `${other.name}のターン` : "相手のターン";
+            } else {
+                el.innerText = "待機中...";
+            }
+        }
+
+        socket.on('manga-selected', (data) => {
+            updateDeck(data.updatedDeck);
+            addLog(`${data.userName}: ${data.manga.title} (+${data.manga.points}巻)`);
+            if(data.userId === socket.id && data.isBurst) updateMsg(socket.id);
+        });
+
+        // デック描画
+        function updateDeck(deck) {
+            const container = document.getElementById('manga-deck'); 
+            container.innerHTML = "";
+            const over = deck.every(m => m.selected);
+            deck.forEach(m => {
+                const img = document.createElement('img');
+                img.src = m.selected ? m.lastImg : m.firstImg;
+                img.className = `manga-card ${m.selected || over ? 'selected' : ''}`;
+                img.onclick = () => { 
+                    if(!over && isMyTurn && !m.selected && confirm(`${m.title}を選択しますか？`)) {
+                        socket.emit('select-manga', m.id);
+                    }
+                };
+                container.appendChild(img);
+            });
+        }
+
+        // ラウンド終了モーダル
+        socket.on('round-over', (res) => {
+            currentGameState = 'waiting';
+            const modal = document.getElementById('round-modal');
+            document.getElementById('modal-title').innerText = "ラウンド終了";
+            document.getElementById('modal-body').innerHTML = res.map((u,i)=>`
+                <div style="margin-bottom:8px;">${i+1}位: ${u.name} (${u.score}巻) <b>+${u.currentWinPoint}pt</b></div>
+            `).join('');
+            
+            const btn = document.getElementById('next-round-btn');
+            btn.innerText = "次のラウンドへ";
+            btn.onclick = () => { 
+                modal.style.display = "none"; 
+                const rb = document.getElementById('ready-btn');
+                rb.classList.remove('hidden'); 
+                rb.disabled = false; 
+                rb.innerText = "準備完了";
+                socket.emit('player-ready'); 
+                // 準備完了を押した扱いにする
+                document.getElementById('turn-message').innerText = "他のプレイヤーを待っています...";
+            };
+            modal.style.display = "block";
+            document.getElementById('stand-btn').classList.add('hidden');
+        });
+
+        // 最終リザルト
+        socket.on('final-game-over', (res) => {
+            const myRank = res.findIndex(u => u.id === socket.id) + 1;
+            const myResult = res.find(u => u.id === socket.id);
+            const modal = document.getElementById('round-modal');
+            document.getElementById('modal-title').innerText = "🎉 最終結果";
+            document.getElementById('modal-body').innerHTML = `
+                <div class="final-rank-highlight">あなたは ${myRank}位 (${myResult.totalWinPoint}pt) です！</div>
+                <div style="font-size:0.85em; color:var(--text-sub); border-top:1px solid var(--border); padding-top:10px;">
+                    ${res.map((u, i) => `<div>${i+1}位: ${u.name} (${u.totalWinPoint}pt)</div>`).join('')}
+                </div>
+            `;
+            const btn = document.getElementById('next-round-btn');
+            btn.innerText = "タイトルへ戻る";
+            btn.onclick = () => location.reload();
+            modal.style.display = "block";
+        });
+
+        function addLog(msg) {
+            const log = document.getElementById('log-container');
+            log.innerHTML = `<div style="margin-bottom:4px;">> ${msg}</div>` + log.innerHTML;
+        }
+    </script>
+</body>
+</html>
